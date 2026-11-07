@@ -50,12 +50,20 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.websockets import WebSocketDisconnect
 
 from app import killswitch
 from app.transcript import append_transcript, get_transcript
 from app.transcript import configure as configure_transcript
+from app.twilio_dial import REQUIRED_TWILIO_KEYS, missing_twilio_keys
+from app.twilio_transport import (
+    TWILIO_SAMPLE_RATE,
+    build_twilio_pipeline,
+    build_twiml,
+    parse_twilio_message,
+)
 
 
 def _sanitize_no_proxy() -> None:
@@ -348,13 +356,19 @@ async def _watch_transcript(
         seen = len(messages)
 
 
-async def _run_session(transport, *, transport_name: str, pc_id=None) -> asyncio.Task:
+async def _run_session(
+    transport, *, transport_name: str, pc_id=None, builder=None
+) -> asyncio.Task:
     """Build the pipeline on any transport and run it as a background task.
 
-    Shared by the WebRTC session (start_session) and the WebSocket session
-    (start_ws_session): same greeting (AI disclosure first), same transcript
-    watcher, same operator-mode handling. Raises RuntimeError in demo mode
-    (no keys) and when another session is already active.
+    Shared by the WebRTC session (start_session), the WebSocket session
+    (start_ws_session) and the Twilio phone-call session
+    (twilio_stream): same greeting (AI disclosure first), same
+    transcript watcher, same operator-mode handling. ``builder`` is the
+    pipeline factory (default app.pipeline.build_pipeline); the Twilio
+    session passes app.twilio_transport.build_twilio_pipeline (8 kHz,
+    streaming STT/TTS). Raises RuntimeError in demo mode (no keys)
+    and when another session is already active.
     """
     global _session_task, _watcher_task, _active_worker
     ready, reason = _live_check()
@@ -366,7 +380,8 @@ async def _run_session(transport, *, transport_name: str, pc_id=None) -> asyncio
     from pipecat.pipeline.runner import PipelineRunner
 
     settings = Settings()
-    built = build_pipeline(settings, transport=transport)
+    build = builder or build_pipeline
+    built = build(settings, transport=transport)
 
     # Greeting first (AI disclosure in the first 5 seconds). The worker's
     # push queue buffers the frame until the pipeline runs; a plain
@@ -712,6 +727,164 @@ async def ws_voice(websocket: WebSocket):
     await websocket.accept()
     try:
         task = await start_ws_session(websocket)
+    except Exception:  # noqa: BLE001 — a failed start must not hang the socket.
+        await websocket.close(code=1011)
+        return
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+@app.get("/api/twilio/status")
+async def twilio_status():
+    """Twilio dial-out readiness — names of missing settings only, never
+    values. "configured" means all five TWILIO_* settings are present;
+    it does NOT mean a call will succeed (trial credit, verified number
+    and the public stream URL are checked at dial time)."""
+    try:
+        settings = Settings()
+    except Exception as exc:  # noqa: BLE001 — status must never crash.
+        return {
+            "configured": False,
+            "missing": list(REQUIRED_TWILIO_KEYS),
+            "test_mode": False,
+            "stream_url_set": False,
+            "state": _state["state"],
+            "transport": _state.get("transport"),
+            "error": str(exc),
+        }
+    missing = missing_twilio_keys(settings)
+    return {
+        "configured": not missing,
+        "missing": missing,
+        "test_mode": bool(settings.TWILIO_TEST_MODE),
+        "stream_url_set": bool(settings.TWILIO_STREAM_URL),
+        "state": _state["state"],
+        "transport": _state.get("transport"),
+    }
+
+
+@app.post("/twilio/voice")
+async def twilio_voice():
+    """TwiML for a Twilio call: connect the call's audio to /twilio/stream.
+
+    Twilio fetches this URL (the dialer's `Url`) when the call connects.
+    When the stream URL is not configured the call is rejected instead
+    of connecting to nowhere.
+    """
+    try:
+        settings = Settings()
+        stream_url = (settings.TWILIO_STREAM_URL or "").strip()
+    except Exception:  # noqa: BLE001 — a broken .env must not crash TwiML.
+        stream_url = ""
+    if not stream_url:
+        content = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<Response><Reject reason="busy"/></Response>'
+        )
+        return Response(content=content, media_type="application/xml")
+    try:
+        twiml = build_twiml(stream_url)
+    except ValueError:
+        content = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<Response><Reject reason="busy"/></Response>'
+        )
+        return Response(content=content, media_type="application/xml")
+    return Response(content=twiml, media_type="application/xml")
+
+
+@app.websocket("/twilio/stream")
+async def twilio_stream(websocket: WebSocket):
+    """Twilio Media Streams socket: one phone call = one pipeline session.
+
+    Twilio connects here after fetching /twilio/voice and sends
+    `connected`, then `start` (streamSid/callSid), then `media` audio
+    (mu-law 8 kHz, base64) until `stop`. The `start` event is read
+    first because TwilioFrameSerializer needs stream_sid at
+    construction; audio after that flows through the transport. Same
+    pipeline, greeting (AI disclosure first) and transcript watcher as
+    the browser sessions, but at 8 kHz with streaming STT/TTS
+    (build_twilio_pipeline). One session at a time across all
+    transports. Rejections close with 1013 (try again later); a failed
+    start closes with 1011.
+    """
+    try:
+        _require_not_killed()
+        _require_live()
+    except HTTPException:
+        await websocket.close(code=1013)
+        return
+    if _state["state"] == "active":
+        await websocket.close(code=1013)
+        return
+    try:
+        settings = Settings()
+    except Exception:  # noqa: BLE001 — a broken .env must not crash the socket.
+        await websocket.close(code=1011)
+        return
+    if missing_twilio_keys(settings):
+        await websocket.close(code=1011)
+        return
+    await websocket.accept()
+    start = None
+    try:
+        while True:
+            raw = await asyncio.wait_for(websocket.receive_text(), timeout=15)
+            parsed = parse_twilio_message(raw)
+            if parsed is None:
+                continue
+            if parsed["event"] == "stop":
+                await websocket.close()
+                return
+            start = parsed
+            break
+    except (TimeoutError, WebSocketDisconnect):
+        await websocket.close(code=1011)
+        return
+    from pipecat.serializers.twilio import TwilioFrameSerializer
+    from pipecat.transports.websocket.fastapi import (
+        FastAPIWebsocketParams,
+        FastAPIWebsocketTransport,
+    )
+
+    try:
+        serializer = TwilioFrameSerializer(
+            stream_sid=start["stream_sid"],
+            call_sid=start.get("call_sid"),
+            account_sid=settings.TWILIO_ACCOUNT_SID,
+            auth_token=settings.TWILIO_AUTH_TOKEN,
+        )
+    except ValueError:
+        await websocket.close(code=1011)
+        return
+    transport = FastAPIWebsocketTransport(
+        websocket,
+        FastAPIWebsocketParams(
+            serializer=serializer,
+            allowed_origins=[],
+            session_timeout=None,
+            add_wav_header=False,
+            # Twilio is mu-law 8 kHz; the serializer resamples to the
+            # pipeline rate, which is 8 kHz both ways here.
+            audio_in_enabled=True,
+            audio_in_sample_rate=TWILIO_SAMPLE_RATE,
+            audio_out_enabled=True,
+            audio_out_sample_rate=TWILIO_SAMPLE_RATE,
+        ),
+    )
+
+    @transport.event_handler("on_client_disconnected")
+    async def on_client_disconnected(transport, client):
+        task = _session_task
+        if task is not None and not task.done():
+            task.cancel()
+
+    try:
+        task = await _run_session(
+            transport, transport_name="twilio", builder=build_twilio_pipeline
+        )
     except Exception:  # noqa: BLE001 — a failed start must not hang the socket.
         await websocket.close(code=1011)
         return

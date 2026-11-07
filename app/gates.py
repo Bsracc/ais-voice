@@ -40,6 +40,16 @@ documentation, never loaded. If no scrub file exists the DNC check is
 recorded as "n/a" — a real scrub (version <= 31 days old) MUST be
 imported before any real dial.
 
+TEST MODE (allow_phase1_unreachable=True): the Twilio trial dialer
+runs on Bsr's laptop, where Phase 1 (port 7860) is NOT running — so
+its opt-out HTTP check can never succeed there. For a SELF-TEST dial
+only (target = Bsr's own verified number, written consent present in
+consent.json, TWILIO_TEST_MODE=true) the caller may pass
+allow_phase1_unreachable=True: the opt-out check is then recorded as
+"n/a" and the dial may proceed. Default is False (fail closed), and
+the skip is written into the audit entry so it is always visible.
+Never use it for a clinic dial.
+
 Every check is appended to data/audit_log.jsonl (phone/session,
 time, allowed, reasons) — never any conversation content.
 
@@ -152,13 +162,20 @@ def check_eligibility(
     dnc_national_path: Path | str | None = None,
     dnc_state_path: Path | str | None = None,
     audit_path: Path | str | None = None,
+    allow_phase1_unreachable: bool = False,
 ) -> dict:
-    """Run every applicable compliance gate. Returns allowed/reasons/checks."""
+    """Run every applicable compliance gate. Returns allowed/reasons/checks.
+
+    allow_phase1_unreachable: TEST ONLY (see module docstring). When
+    True and Phase 1 cannot be reached, the opt-out check is recorded
+    as "n/a" instead of failing the dial. Default False: fail closed.
+    """
     now = _as_now(now)
     data_dir = _data_dir()
     session_type = session.get("type", "outbound-dial")
     phone = session.get("phone")
     reasons: list[str] = []
+    notes: list[str] = []
     checks: dict[str, bool | str] = {}
 
     # --- gates that apply to EVERY session type --------------------------
@@ -221,12 +238,19 @@ def check_eligibility(
     if not checks["consent"]:
         reasons.append("no_consent")
 
-    # Phase 1 opt-out (HTTP, read-only). Unreachable -> fail closed.
+    # Phase 1 opt-out (HTTP, read-only). Unreachable -> fail closed,
+    # unless the caller explicitly opted into test mode (see docstring).
     try:
         opted_out = phase1.is_opted_out(str(phone))
     except Phase1Unavailable:
-        checks["opt_out"] = False
-        reasons.append("phase1_unreachable")
+        if allow_phase1_unreachable:
+            checks["opt_out"] = "n/a"
+            notes.append(
+                "phase1 opt-out check skipped: Phase 1 unreachable (test mode)"
+            )
+        else:
+            checks["opt_out"] = False
+            reasons.append("phase1_unreachable")
     else:
         checks["opt_out"] = not opted_out
         if opted_out:
@@ -290,6 +314,7 @@ def check_eligibility(
             "phone": str(phone),
             "allowed": result["allowed"],
             "reasons": reasons,
+            "notes": notes,
         },
     )
     return result

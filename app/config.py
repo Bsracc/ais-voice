@@ -52,6 +52,24 @@ class Settings(BaseSettings):
     CARTESIA_API_KEY: str = ""
     CARTESIA_VOICE_ID: str = ""
 
+    # Twilio trial dial-out (test calls only — see DIAL_TEST.md).
+    # All five are empty until Bsr signs up for the free Twilio trial
+    # and fills them in: the dialer refuses to run without them, and no
+    # number or key is ever hard-coded. TWILIO_STREAM_URL is the public
+    # wss:// URL of this service's /twilio/stream endpoint (via ngrok
+    # on the laptop); TWILIO_TEST_MODE=true means "self-test only"
+    # (Phase 1 is not running on the laptop, so its opt-out check is
+    # recorded as n/a instead of failing the dial — see gates.py).
+    # For real clinic dials TEST_MODE must be false.
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_FROM_NUMBER: str = ""
+    TWILIO_TO_NUMBER: str = ""
+    TWILIO_STREAM_URL: str = ""
+    TWILIO_TEST_MODE: bool = False
+    TWILIO_TEST_TIMEZONE: str = "Asia/Jakarta"
+    TWILIO_TEST_STATE: str = ""
+
     # Offer — dental clinic website redesign (Himmah practice).
     AGENCY_NAME: str = "AISIMA"
     SERVICE_NAME: str = "Website Redesign for Dental Clinics"

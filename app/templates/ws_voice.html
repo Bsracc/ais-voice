@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AISIMA Voice — WebSocket Test</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto;
+         padding: 0 1rem; line-height: 1.5; color: #1a1a1a; }
+  .warn { background: #fff3cd; border: 1px solid #e6c200; padding: .75rem 1rem;
+          border-radius: 8px; }
+  .disclosure { background: #eef4ff; border: 1px solid #9db8e8; padding: .75rem 1rem;
+          border-radius: 8px; margin-top: 1rem; }
+  .error { background: #fdecea; border: 1px solid #d93025; padding: .75rem 1rem;
+          border-radius: 8px; margin-top: 1rem; display: none; }
+  button { font-size: 1.1rem; padding: .6rem 1.4rem; border-radius: 8px;
+           border: 1px solid #888; cursor: pointer; margin-right: .5rem; }
+  button:disabled { opacity: .5; cursor: default; }
+  #status { font-weight: bold; margin: 1rem 0; }
+  #transcript { border: 1px solid #ccc; border-radius: 8px; min-height: 180px;
+          max-height: 320px; overflow-y: auto; padding: .75rem 1rem; }
+  #transcript p { margin: .4rem 0; }
+  #transcript .role-ai { color: #0b5394; }
+  #transcript .role-user { color: #38761d; }
+  .meta { color: #666; font-size: .9rem; }
+</style>
+</head>
+<body>
+<h1>AISIMA Voice — WebSocket Test</h1>
+
+<p class="warn"><strong>Simulation — no telephone call.</strong>
+This is a voice test in the browser only, over WebSocket (TCP — no WebRTC,
+no UDP). Nothing is dialled, no clinic is called, and no audio is recorded.
+Recording is off.</p>
+
+<div class="disclosure">
+  <strong>AI disclosure:</strong> You are speaking with an AI assistant
+  calling on behalf of <strong>AISIMA</strong> — Website Redesign for Dental
+  Clinics ($1,000 one-time). This AI speaks first and says so within the
+  first 5 seconds of the conversation.
+</div>
+
+<p id="error" class="error" role="alert"></p>
+
+<p id="status">Status: idle</p>
+<p id="brain-mode" class="meta">Brain mode: —</p>
+<p id="transport" class="meta">Transport: WebSocket /ws/voice — mic PCM16 mono 16 kHz out,
+agent PCM16 mono 24 kHz in.</p>
+
+<button id="mic-start" type="button">🎙️ Start mic</button>
+<button id="mic-stop" type="button" disabled>⏹️ Stop</button>
+<p class="meta" id="hint">Press Start mic to talk with the voice agent.
+Your microphone audio goes to the agent only; it is not recorded or stored.</p>
+<p class="meta" id="operator-note">In operator mode, replies are not instant:
+your message is queued and a human operator replies shortly.</p>
+
+<h2>Transcript (live)</h2>
+<div id="transcript" aria-live="polite">
+  <p class="meta">No transcript yet — start the mic to begin.</p>
+</div>
+
+<script src="/static/ws_voice.js"></script>
+</body>
+</html>

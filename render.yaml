@@ -1,0 +1,32 @@
+# Render Blueprint for ais-voice (free tier, no card).
+#
+# Deploy: Render Dashboard → New → Blueprint → connect the
+# Bsracc/ais-voice repo → Apply. Or: New → Web Service → pick the
+# repo → Runtime Docker → plan Free → the settings below are the
+# same values.
+#
+# Secrets are NOT in this file. Keys marked `sync: false` must be
+# set in the Render dashboard (Environment tab) — copy the values
+# from the local ais-voice/.env, never commit them anywhere.
+# Free tier: 512 MB RAM (service idles ~108 MB), spins down after
+# ~15 min idle, 750 hours/month.
+
+services:
+  - type: web
+    name: ais-voice
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: BRAIN_MODE
+        value: muse-operator
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: CARTESIA_API_KEY
+        sync: false
+      - key: CARTESIA_VOICE_ID
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false

@@ -17,8 +17,12 @@ atau Cloudflare.
 unzip ais-voice-pc.zip -d ais-voice   # atau: git clone https://github.com/Bsracc/ais-voice
 cd ais-voice
 uv sync
-cp .env.example .env
 ```
+
+**Paket PnP (zip ini): `.env` sudah terisi** — key Deepgram + Cartesia
+(suara Austin) dan `BRAIN_MODE=muse-operator` sudah di dalam. Langsung
+loncat ke langkah 4. Kalau ambil dari git clone (bukan zip), baru perlu
+`cp .env.example .env` dan isi key sendiri.
 
 ## 3. Isi `.env` (jangan pernah commit file ini)
 

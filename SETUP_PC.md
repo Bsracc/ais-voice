@@ -1,4 +1,4 @@
-# Jalan di PC Lokal (Fedora) — ais-voice
+# Jalan di PC Lokal (Fedora / Omarchy-Arch) — ais-voice
 
 Service suara AISIMA (Phase 2): STT Deepgram → otak LLM lewat Nagoya Router
 (Opus 5.5) → TTS Cartesia (suara Austin). Dijalankan di laptop/PC sendiri,
@@ -7,7 +7,7 @@ atau Cloudflare.
 
 ## 1. Syarat
 
-- Fedora (atau Linux lain), Python 3.12, `uv`, `git`.
+- Fedora / Omarchy-Arch (atau Linux lain), Python 3.12+, `uv`, `git`.
 - Pasang uv kalau belum ada: `curl -LsSf https://astral.sh/uv/install.sh | sh`
   lalu buka terminal baru.
 
@@ -56,6 +56,8 @@ kamu, dan Muse (aku) harus bisa membacanya dari sini. Caranya pakai ngrok:
 ./start-server.sh
 # terminal 2: terowongan publik (ngrok gratis jalan di laptop, tanpa proxy)
 ngrok http 7861
+# Omarchy/Arch: pasang dulu dengan: yay -S ngrok
+# lalu sekali saja: ngrok config add-authtoken <token dari dashboard.ngrok.com>
 ```
 
 - Kirim URL ngrok-nya ke Muse (contoh: `https://xxxx.ngrok-free.app`).

@@ -33,7 +33,14 @@ class Settings(BaseSettings):
         return normalized
 
     # Claude (LLM) — Pipecat 1.15 requires anthropic SDK 1.x.
+    # ANTHROPIC_BASE_URL: empty = api.anthropic.com (official). Set it to
+    # an Anthropic-compatible gateway (e.g. Nagoya Router) to run the
+    # brain through that gateway instead: the same key + model fields
+    # are used, only the endpoint changes. For Anthropic-protocol
+    # gateways the base URL has NO trailing /v1 (the SDK appends
+    # /v1/messages itself).
     ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_BASE_URL: str = ""
     ANTHROPIC_MODEL: str = "claude-sonnet-5-5"
 
     # Deepgram (STT)

@@ -55,6 +55,28 @@ def test_live_llm_without_key_raises():
         build_pipeline(settings, stt=FakeSTT(), tts=FakeTTS(), llm=None)
 
 
+def test_live_llm_with_gateway_base_url_uses_gateway_client():
+    # Nagoya Router (or any Anthropic-compatible gateway): the LLM
+    # service must talk to the gateway endpoint, not api.anthropic.com.
+    from app.pipeline import _live_llm
+
+    settings = _settings(
+        ANTHROPIC_API_KEY="test-key",
+        ANTHROPIC_BASE_URL="https://router.example.com",
+        ANTHROPIC_MODEL="claude-opus-5-5",
+    )
+    llm = _live_llm(settings, "system prompt")
+    assert str(llm._client.base_url) == "https://router.example.com"
+
+
+def test_live_llm_without_base_url_uses_official_endpoint():
+    from app.pipeline import _live_llm
+
+    settings = _settings(ANTHROPIC_API_KEY="test-key")
+    llm = _live_llm(settings, "system prompt")
+    assert "anthropic.com" in str(llm._client.base_url)
+
+
 def test_live_stt_without_key_raises():
     settings = _settings()
     with pytest.raises(ValueError, match="missing API key"):

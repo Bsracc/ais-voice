@@ -23,6 +23,7 @@ offline, with no keys and no network.
 
 from dataclasses import dataclass
 
+from anthropic import AsyncAnthropic
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.pipeline.pipeline import Pipeline
@@ -75,8 +76,17 @@ def _require_key(settings: Settings, field: str) -> str:
 
 def _live_llm(settings: Settings, system_prompt: str) -> AnthropicLLMService:
     api_key = _require_key(settings, "ANTHROPIC_API_KEY")
+    # Gateway support: when ANTHROPIC_BASE_URL is set (e.g. Nagoya
+    # Router), build the Anthropic client against that endpoint and
+    # hand it to Pipecat via `client=` — Pipecat then uses it as-is.
+    # Empty base URL = official api.anthropic.com (unchanged behaviour).
+    base_url = str(getattr(settings, "ANTHROPIC_BASE_URL", "") or "").strip()
+    client = (
+        AsyncAnthropic(api_key=api_key, base_url=base_url) if base_url else None
+    )
     return AnthropicLLMService(
         api_key=api_key,
+        client=client,
         settings=AnthropicLLMService.Settings(
             model=settings.ANTHROPIC_MODEL,
             max_tokens=1024,

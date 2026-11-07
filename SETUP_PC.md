@@ -42,6 +42,26 @@ Mode lain: `BRAIN_MODE=muse-operator` = tanpa LLM (setiap giliran bicara
 masuk antrean, dibalas manual lewat `scripts/muse_reply.py`). Gratis tapi
 lambat — hanya cadangan kalau key router habis.
 
+## 4b. Tes dengan muse-operator (Muse yang jawab, tanpa key Nagoya)
+
+Mode ini bisa jalan di laptop — tapi antrean pending-nya ada di laptop
+kamu, dan Muse (aku) harus bisa membacanya dari sini. Caranya pakai ngrok:
+
+```bash
+# terminal 1: service (BRAIN_MODE=muse-operator di .env)
+./start-server.sh
+# terminal 2: terowongan publik (ngrok gratis jalan di laptop, tanpa proxy)
+ngrok http 7861
+```
+
+- Kirim URL ngrok-nya ke Muse (contoh: `https://xxxx.ngrok-free.app`).
+- Buka http://127.0.0.1:7861/ws di browser laptop, izinkan mic, bicara.
+- Muse memantau `https://<ngrok>/api/pending` dari sini dan membalas
+  tiap giliran lewat `POST /api/operator/reply` — suara Austin membacakan
+  balasan di browser kamu.
+- Bilang "mulai tes" ke Muse supaya antrean dipantau; bilang "stop" kalau
+  selesai, lalu matikan ngrok (URL publik jangan dibiarkan hidup).
+
 ## 4. Jalan
 
 ```bash
